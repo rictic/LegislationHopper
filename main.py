@@ -2,12 +2,15 @@
 
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp import util
+from google.appengine.ext import db
 
+class Person(db.Model):
+    name = db.StringProperty()
+    addresses = db.ListProperty(str)
 
 class MainHandler(webapp.RequestHandler):
     def get(self):
         self.response.out.write('Hello world!')
-
 
 def main():
     application = webapp.WSGIApplication([('/', MainHandler)],
