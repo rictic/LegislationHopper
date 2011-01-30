@@ -4,7 +4,7 @@ from google.appengine.ext import webapp
 from google.appengine.ext.webapp import util
 from google.appengine.ext import db
 from random import randint
-from itertools import imap
+from itertools import imap, groupby
 
 #predicate validator
 def pv(f):
@@ -31,21 +31,29 @@ class Proposal(db.Model):
     text = db.TextProperty(required=True)
     proposer = db.ReferenceProperty(Person)
     proposed = db.BooleanProperty(default=False, required=True)
+    proposed_on = db.DateTimeProperty(auto_now_add=True)
+    
+    def __eq__(self, o):
+        if type(o) == Proposal:
+            return self.key() == o.key()
+        return False
 
-def getPeopleWithUnproposedLegislation():
-    #first pass, stupid, slow, but hopefully correct
-    #obviously this will need to be optimized to scale at all
-    unproposed_legislation = db.GqlQuery("SELECT * FROM Proposal WHERE proposed = False")
-    return list(set(imap(lambda x: x.proposer, unproposed_legislation)))
+def getNextProposal():
+    people = list(db.GqlQuery("SELECT * FROM Person ORDER BY rank ASC"))
+    for rank, rankGroup in groupby(people, lambda p: p.rank):
+        proposal = getEarliestPropsalBy(rankGroup)
+        if proposal is not None:
+            return proposal
+    return None
 
-def getProposer():
-    people_with_unproposed_legislation = getPeopleWithUnproposedLegislation()
-    min_rank_person = list(db.GqlQuery("SELECT * FROM Person WHERE key IN :1 ORDER BY rank ASC LIMIT 1", people_with_unproposed_legislation))
-    if len(min_rank_person) == 0: 
+def getEarliestPropsalBy(people):
+    proposal = list(db.GqlQuery("SELECT * FROM Proposal WHERE proposer IN :1 AND proposed = False ORDER BY proposed_on ASC LIMIT 1", getKeys(people)))
+    if len(proposal) == 0:
         return None
-    min_people = list(db.GqlQuery("SELECT * FROM Person WHERE rank = :1 AND __key__ in :2", min_rank_person[0].rank, people_with_unproposed_legislation))
-    index = randint(0, len(min_people))
-    return min_people[index]
+    return proposal[0]
+
+def getKeys(entities):
+    return list(map(lambda e: e.key(), entities))
 
 class MainHandler(webapp.RequestHandler):
     def get(self):
